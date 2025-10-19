@@ -99,6 +99,66 @@ Content-Type: application/json
 
 **Response:** ZIP file download
 
+### 6. Create GitHub Repository (POST)
+```
+POST /gh-repo-create
+Content-Type: application/json
+Authorization: Bearer <GITHUB_TOKEN>
+```
+
+Create a repository for the authenticated user or in an organization.
+
+Auth options:
+- Prefer an `Authorization: Bearer <token>` header
+- Or set `GITHUB_TOKEN` environment variable on the server
+
+Request body:
+```json
+{
+  "name": "my-repo",
+  "description": "Demo repo",
+  "private": true,
+  "org": "my-org",             // optional; else created under the user
+  "auto_init": true,            // initialize with an empty README
+  "gitignore_template": "Python" // optional; uses GitHub template names
+}
+```
+
+Response (subset of GitHub fields):
+```json
+{
+  "id": 123456789,
+  "name": "my-repo",
+  "full_name": "my-org/my-repo",
+  "private": true,
+  "html_url": "https://github.com/my-org/my-repo",
+  "ssh_url": "git@github.com:my-org/my-repo.git",
+  "clone_url": "https://github.com/my-org/my-repo.git",
+  "default_branch": "main",
+  "description": "Demo repo",
+  "visibility": "private"
+}
+```
+
+### 7. GitHub OAuth Login Flow
+
+Endpoints:
+- `GET /auth/github/login` – Redirects to GitHub for consent
+- `GET /auth/github/callback` – OAuth callback (configured in your GitHub OAuth App)
+- `GET /auth/github/me` – Returns current GitHub user if authenticated
+
+Setup steps:
+1. Create a GitHub OAuth App: https://github.com/settings/developers
+2. Set Authorization callback URL to: `http://localhost:8000/auth/github/callback` (adjust for prod)
+3. Configure the following environment variables:
+  - `GITHUB_CLIENT_ID`
+  - `GITHUB_CLIENT_SECRET`
+  - `GITHUB_REDIRECT_URI` (e.g., `http://localhost:8000/auth/github/callback`)
+  - `SESSION_SECRET_KEY` (any random string)
+  - Optional: `SESSION_COOKIE_NAME`, `SESSION_HTTPS_ONLY`
+4. Start the server and visit `/auth/github/login`
+5. After login, the server stores a session token. You can now call `/gh-repo-create` without sending an Authorization header.
+
 ## Setup and Installation
 
 ### Option 1: Local Development
@@ -203,6 +263,8 @@ The API includes interactive documentation at `/docs` where you can test all end
 For production deployments, consider adding:
 - `ALLOWED_ORIGINS`: Comma-separated list of allowed CORS origins
 - `PORT`: Server port (default: 8000)
+- `GITHUB_TOKEN`: Default token if requests don't include Authorization header
+- `GITHUB_DEFAULT_ORG`: Default organization name when `org` isn't provided in the request
 
 ## API Documentation
 
