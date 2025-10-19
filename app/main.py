@@ -36,6 +36,8 @@ except ImportError:
         session_secret_key = os.environ.get('SESSION_SECRET_KEY', 'change-this-in-production')
         session_cookie_name = os.environ.get('SESSION_COOKIE_NAME', 'recap_session')
         session_https_only = os.environ.get('SESSION_HTTPS_ONLY', 'False') == 'True'
+        session_same_site = os.environ.get('SESSION_SAME_SITE', 'lax')
+        session_max_age = int(os.environ.get('SESSION_MAX_AGE', str(14 * 24 * 60 * 60)))
     settings = Settings()
 
 
@@ -61,7 +63,9 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret_key,
     session_cookie=settings.session_cookie_name,
-    https_only=getattr(settings, 'session_https_only', False),
+    https_only=settings.session_https_only,
+    same_site=settings.session_same_site,  # type: ignore
+    max_age=settings.session_max_age,
 )
 
 # Path to cookiecutter templates
