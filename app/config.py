@@ -3,6 +3,8 @@ Configuration settings for the application.
 """
 from pydantic_settings import BaseSettings
 from typing import List
+from pydantic import field_validator
+import json
 
 
 class Settings(BaseSettings):
@@ -18,7 +20,19 @@ class Settings(BaseSettings):
 
     # CORS Settings
     # In production, set to specific domains
-    allowed_origins: List[str] = ["*"]
+    allowed_origins: List[str] = ["http://localhost:4000"]
+    
+    @field_validator('allowed_origins', mode='before')
+    @classmethod
+    def parse_allowed_origins(cls, v):
+        """Parse allowed_origins from JSON string or list."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                # If not valid JSON, treat as single origin
+                return [v]
+        return v
 
     # Template Settings
     # Now that cookiecutter/ is at repo root, default to that
