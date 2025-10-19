@@ -1,6 +1,5 @@
 {
-    "project_name": "Data template",
-    "__project_slug": "<< cookiecutter.project_name|lower|replace(' ', '-') >>",
+    "project_name": "recap-data-template",
     "r": true,
     "r_version": [
         "4.5.1",
@@ -21,6 +20,7 @@
     "email": "morgan.doe@univ-amu.fr",
     "institution": "Aix-Marseille University, CNRS, AMSE, France",
     "__prompts__": {
+        "project_name": "Project name (used to create the project's directory)",
         "r": "Use R?",
         "r_version": "R version (used only if R is enabled)",
         "latex": "LaTeX package list",

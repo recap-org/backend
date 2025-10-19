@@ -84,9 +84,9 @@ class TemplateListResponse(BaseModel):
 class TemplateRequest(BaseModel):
     """Request model for generating a template."""
     template_name: str = Field(
-        ..., description="Name of the template (data, article, presentation, devcontainer)")
-    project_name: Optional[str] = Field(
-        "My Project", description="Name of the project")
+        "data", description="Name of the template (data, article, presentation, devcontainer)")
+    project_name: str = Field(
+        "my-project", description="Name of the project; used as directory name")
     r: Optional[bool] = Field(True, description="Use R?")
     r_version: Optional[str] = Field("4.5.1", description="R version")
     latex: Optional[str] = Field(
@@ -104,12 +104,10 @@ class TemplateRequest(BaseModel):
 # --- Combined request for repo creation and template generation ---
 class GitHubRepoRequest(TemplateRequest):
     """Request body for creating a GitHub repository and populating it with a template."""
-    name: str = Field(..., description="Repository name")
     description: Optional[str] = Field(None, description="Repository description")
     private: bool = Field(True, description="Create as private repository")
     org: Optional[str] = Field(None, description="Organization login; if provided or configured, create repo in org")
     auto_init: bool = Field(False, description="Initialize the repository with an empty README (ignored, always false)")
-    gitignore_template: Optional[str] = Field(None, description="Apply a .gitignore template, e.g., 'Python' or 'R' (GitHub templates)")
     allow_squash_merge: Optional[bool] = None
     allow_merge_commit: Optional[bool] = None
     allow_rebase_merge: Optional[bool] = None
@@ -130,6 +128,12 @@ class GitHubRepoResponse(BaseModel):
     visibility: Optional[str] = None
 
 
+from .services.generator import (
+    generate_cookiecutter_project,
+    zip_directory_with_symlinks,
+)
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -141,8 +145,8 @@ async def root():
             "/health": "Health check endpoint",
             "/templates": "List available templates",
             "/templates/{template_name}/config": "Get template configuration",
-            "/generate": "Generate and download a template",
-            "/gh-repo-create": "Create a GitHub repository for the authenticated user or org",
+            "/download": "Generate a template and download it",
+            "/gh-repo-create": "Generate a template and create a GitHub repository for the authenticated user or org",
             "/auth/github/login": "Start GitHub OAuth login flow",
             "/auth/github/callback": "OAuth callback endpoint",
             "/auth/github/me": "Get the authenticated GitHub user (if logged in)"
@@ -212,105 +216,23 @@ async def get_template_config(template_name: str):
     return template_config
 
 
-@app.post("/generate")
+@app.post("/download")
 async def generate_template(request: TemplateRequest):
     """
     Generate a cookiecutter template based on the provided parameters.
     Returns a zip file containing the generated project.
     """
-    # Load main cookiecutter.json to validate template exists
-    main_config_path = COOKIECUTTER_BASE / "cookiecutter.json"
-
-    if not main_config_path.exists():
-        raise HTTPException(
-            status_code=500, detail="Template configuration not found")
-
-    with open(main_config_path, 'r') as f:
-        main_config = json.load(f)
-
-    if request.template_name not in main_config["templates"]:
-        raise HTTPException(
-            status_code=404, detail=f"Template '{request.template_name}' not found")
-
-    # Get template path
-    template_rel_path = main_config["templates"][request.template_name]["path"]
-    template_path = COOKIECUTTER_BASE / template_rel_path
-
-    if not template_path.exists():
-        raise HTTPException(
-            status_code=404, detail=f"Template directory not found: {template_path}")
-
-    # Create temporary directory for generation
-    temp_dir = tempfile.mkdtemp()
+    # Use shared generator
+    gen = generate_cookiecutter_project(request)
+    temp_dir = gen["temp_dir"]
+    output_dir = Path(gen["output_dir"]) 
 
     try:
-        # Helper to convert values to strings for cookiecutter
-        def str_or_empty(val):
-            return str(val) if val is not None else ""
-        
-        # Prepare extra context based on template type
-        extra_context = {
-            "project_name": str_or_empty(request.project_name),
-        }
+        zip_buffer = zip_directory_with_symlinks(output_dir)
 
-        # Add template-specific parameters
-        if request.template_name == "data":
-            extra_context.update({
-                "r": str_or_empty(request.r),
-                "r_version": str_or_empty(request.r_version),
-                "latex": str_or_empty(request.latex),
-                "first_name": str_or_empty(request.first_name),
-                "last_name": str_or_empty(request.last_name),
-                "email": str_or_empty(request.email),
-                "institution": str_or_empty(request.institution),
-            })
-        elif request.template_name in ["article", "presentation"]:
-            extra_context.update({
-                "first_name": str_or_empty(request.first_name),
-                "last_name": str_or_empty(request.last_name),
-                "email": str_or_empty(request.email),
-                "institution": str_or_empty(request.institution),
-            })
-
-        # Generate the project using cookiecutter
-        output_dir = cookiecutter(
-            str(template_path),
-            output_dir=temp_dir,
-            no_input=True,
-            extra_context=extra_context
-        )
-
-        # Create zip file in memory with symlink support
-        zip_buffer = io.BytesIO()
-
-        with ZipFile(zip_buffer, 'w') as zip_file:
-            # Walk through the generated directory and add files to zip
-            output_path = Path(output_dir)
-            for file_path in output_path.rglob('*'):
-                arcname = str(file_path.relative_to(output_path))
-                
-                if file_path.is_symlink():
-                    # Create a ZipInfo for the symlink
-                    zip_info = ZipInfo(arcname)
-                    zip_info.create_system = 3  # Unix
-                    # Set external attributes to indicate symlink
-                    # 0o120000 = symlink file type in Unix
-                    # 0o755 = permissions
-                    zip_info.external_attr = (0o120000 | 0o755) << 16
-                    # Read the symlink target
-                    link_target = os.readlink(file_path)
-                    zip_file.writestr(zip_info, link_target)
-                elif file_path.is_file():
-                    # Regular file
-                    zip_file.write(file_path, arcname)
-
-        zip_buffer.seek(0)
-
-        # Generate filename
         project_name_safe = (request.project_name or "project").lower().replace(' ', '-')
-        filename = f"{request.template_name}-{project_name_safe}.zip"
+        filename = f"{project_name_safe}.zip"
 
-        # Return the zip file
         return StreamingResponse(
             zip_buffer,
             media_type="application/zip",
@@ -318,45 +240,8 @@ async def generate_template(request: TemplateRequest):
                 "Content-Disposition": f'attachment; filename="{filename}"'
             }
         )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error generating template: {str(e)}")
-
     finally:
-        # Clean up temporary directory
         shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-@app.get("/generate")
-async def generate_template_get(
-    template_name: str = Query(..., description="Template name"),
-    project_name: str = Query("My Project", description="Project name"),
-    r: bool = Query(True, description="Use R?"),
-    r_version: str = Query("4.5.1", description="R version"),
-    latex: str = Query("auto", description="LaTeX packages"),
-    first_name: str = Query("Morgan", description="First name"),
-    last_name: str = Query("Doe", description="Last name"),
-    email: str = Query("morgan.doe@example.com", description="Email"),
-    institution: str = Query("Your Institution", description="Institution"),
-):
-    """
-    Generate a cookiecutter template using GET parameters (for simple frontend integration).
-    Returns a zip file containing the generated project.
-    """
-    request = TemplateRequest(
-        template_name=template_name,
-        project_name=project_name,
-        r=r,
-        r_version=r_version,
-        latex=latex,
-        first_name=first_name,
-        last_name=last_name,
-        email=email,
-        institution=institution,
-    )
-
-    return await generate_template(request)
 
 
 
@@ -388,15 +273,18 @@ async def gh_repo_create(
     else:
         url = f"{api_base}/user/repos"
 
+    # Derive repo name from project_name (fallback to 'project')
+    repo_name = (body.project_name or "project").strip()
+    # simple slug: lower, spaces->-, strip invalid minimal
+    repo_name_slug = "-".join(repo_name.lower().split())
+
     # Build payload per GitHub API
     payload = {
-        "name": body.name,
+        "name": repo_name_slug,
         "description": body.description,
         "private": body.private,
         "auto_init": False,  # always false, we'll push files ourselves
     }
-    if body.gitignore_template:
-        payload["gitignore_template"] = body.gitignore_template
     if body.allow_squash_merge is not None:
         payload["allow_squash_merge"] = body.allow_squash_merge
     if body.allow_merge_commit is not None:
@@ -444,49 +332,10 @@ async def gh_repo_create(
     repo_default_branch = data.get("default_branch", "main")
 
     # --- Generate cookiecutter template ---
-    main_config_path = COOKIECUTTER_BASE / "cookiecutter.json"
-    if not main_config_path.exists():
-        raise HTTPException(status_code=500, detail="Template configuration not found")
-    with open(main_config_path, 'r') as f:
-        main_config = json.load(f)
-    if body.template_name not in main_config["templates"]:
-        raise HTTPException(status_code=404, detail=f"Template '{body.template_name}' not found")
-    template_rel_path = main_config["templates"][body.template_name]["path"]
-    template_path = COOKIECUTTER_BASE / template_rel_path
-    if not template_path.exists():
-        raise HTTPException(status_code=404, detail=f"Template directory not found: {template_path}")
-
-    temp_dir = tempfile.mkdtemp()
+    gen = generate_cookiecutter_project(body, project_name_fallback=repo_name_slug)
+    temp_dir = gen["temp_dir"]
     try:
-        def str_or_empty(val):
-            return str(val) if val is not None else ""
-        extra_context = {
-            "project_name": str_or_empty(body.project_name or body.name),
-        }
-        if body.template_name == "data":
-            extra_context.update({
-                "r": str_or_empty(body.r),
-                "r_version": str_or_empty(body.r_version),
-                "latex": str_or_empty(body.latex),
-                "first_name": str_or_empty(body.first_name),
-                "last_name": str_or_empty(body.last_name),
-                "email": str_or_empty(body.email),
-                "institution": str_or_empty(body.institution),
-            })
-        elif body.template_name in ["article", "presentation"]:
-            extra_context.update({
-                "first_name": str_or_empty(body.first_name),
-                "last_name": str_or_empty(body.last_name),
-                "email": str_or_empty(body.email),
-                "institution": str_or_empty(body.institution),
-            })
-
-        output_dir = cookiecutter(
-            str(template_path),
-            output_dir=temp_dir,
-            no_input=True,
-            extra_context=extra_context
-        )
+        output_dir = Path(gen["output_dir"])
 
         # --- Initialize git, commit, and push ---
         repo_dir = Path(output_dir)
@@ -528,122 +377,8 @@ async def gh_repo_create(
 
 
 # --- GitHub OAuth: Login and Callback ---
-from fastapi import Request
-from fastapi.responses import RedirectResponse
-from itsdangerous import URLSafeSerializer
-
-
-@app.get("/auth/github/login")
-async def github_login(request: Request):
-    client_id = getattr(settings, 'github_client_id', None)
-    redirect_uri = getattr(settings, 'github_redirect_uri', None)
-    if not client_id or not redirect_uri:
-        raise HTTPException(status_code=500, detail="GitHub OAuth not configured (client_id/redirect_uri)")
-
-    # Create a signed state for CSRF protection
-    s = URLSafeSerializer(settings.session_secret_key, salt="github-oauth-state")
-    state = s.dumps({"nonce": os.urandom(8).hex()})
-    request.session["oauth_state"] = state
-
-    authorize_url = (
-        "https://github.com/login/oauth/authorize"
-        f"?client_id={client_id}"
-        f"&redirect_uri={redirect_uri}"
-        "&scope=repo%20read:user"
-        f"&state={state}"
-    )
-    return RedirectResponse(authorize_url)
-
-
-@app.get("/auth/github/callback")
-async def github_callback(request: Request, code: Optional[str] = None, state: Optional[str] = None):
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing 'code' parameter")
-    # Verify state
-    expected = request.session.get("oauth_state")
-    if not expected or not state:
-        raise HTTPException(status_code=400, detail="Missing OAuth state")
-    s = URLSafeSerializer(settings.session_secret_key, salt="github-oauth-state")
-    try:
-        s.loads(state)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
-
-    client_id = getattr(settings, 'github_client_id', None)
-    client_secret = getattr(settings, 'github_client_secret', None)
-    redirect_uri = getattr(settings, 'github_redirect_uri', None)
-    if not client_id or not client_secret or not redirect_uri:
-        raise HTTPException(status_code=500, detail="GitHub OAuth not configured")
-
-    token_url = "https://github.com/login/oauth/access_token"
-    headers = {
-        "Accept": "application/json",
-    }
-    payload = {
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "code": code,
-        "redirect_uri": redirect_uri,
-    }
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        try:
-            resp = await client.post(token_url, headers=headers, data=payload)
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"GitHub token exchange failed: {e}")
-
-    if resp.status_code >= 400:
-        try:
-            detail = resp.json()
-        except Exception:
-            detail = resp.text
-        raise HTTPException(status_code=502, detail=f"GitHub token exchange error: {detail}")
-
-    token_data = resp.json()
-    access_token = token_data.get("access_token")
-    if not access_token:
-        raise HTTPException(status_code=502, detail="No access_token returned by GitHub")
-
-    # Store token in session
-    request.session["github_token"] = access_token
-
-    # Optionally, fetch user info and store minimal profile
-    api_base = getattr(settings, 'github_api_url', 'https://api.github.com').rstrip('/')
-    async with httpx.AsyncClient(timeout=30) as client:
-        me = await client.get(
-            f"{api_base}/user",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-    if me.status_code < 400:
-        request.session["github_user"] = me.json()
-
-    # Redirect to a simple success page or back to docs
-    return RedirectResponse(url="/docs")
-
-
-@app.get("/auth/github/me")
-async def github_me(request: Request):
-    token = request.session.get("github_token")
-    if not token:
-        return JSONResponse(status_code=401, content={"authenticated": False})
-    api_base = getattr(settings, 'github_api_url', 'https://api.github.com').rstrip('/')
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{api_base}/user",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-    if resp.status_code >= 400:
-        return JSONResponse(status_code=resp.status_code, content={"authenticated": False})
-    user = resp.json()
-    return {"authenticated": True, "user": user}
+from .auth import router as auth_router
+app.include_router(auth_router)
 
 
 if __name__ == "__main__":
