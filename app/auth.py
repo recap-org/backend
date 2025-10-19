@@ -103,8 +103,17 @@ async def github_callback(request: Request, code: Optional[str] = None, state: O
     if me.status_code < 400:
         request.session["github_user"] = me.json()
 
-    # Redirect to a simple success page or back to docs
-    return RedirectResponse(url="/docs")
+    # Redirect to frontend or configured success URL
+    success_url = getattr(settings, 'oauth_success_redirect', None)
+    if not success_url:
+        # Default: redirect to first allowed origin or /docs as fallback
+        allowed_origins = getattr(settings, 'allowed_origins', [])
+        if allowed_origins and allowed_origins[0] != "*":
+            success_url = allowed_origins[0]
+        else:
+            success_url = "/docs"
+    
+    return RedirectResponse(url=success_url)
 
 
 @router.get("/me")

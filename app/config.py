@@ -2,7 +2,7 @@
 Configuration settings for the application.
 """
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Literal
 from pydantic import field_validator
 import json
 
@@ -48,11 +48,15 @@ class Settings(BaseSettings):
     github_client_secret: str | None = None
     # e.g., http://localhost:8000/auth/github/callback (must match GitHub app config)
     github_redirect_uri: str | None = None
+    # Where to redirect after successful OAuth login (default: frontend URL)
+    oauth_success_redirect: str | None = None
 
     # Session Settings
     session_secret_key: str = "change-this-in-production"
     session_cookie_name: str = "recap_session"
     session_https_only: bool = False
+    session_same_site: Literal["lax", "strict", "none"] = "lax"  # "none" requires https_only=True
+    session_max_age: int = 14 * 24 * 60 * 60  # 14 days in seconds
 
     class Config:
         env_file = ".env"
