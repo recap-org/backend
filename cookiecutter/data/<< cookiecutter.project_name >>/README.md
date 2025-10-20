@@ -1,4 +1,4 @@
-# RECAP Demo template
+# RECAP Academic paper template
 
 ## Purpose
 
