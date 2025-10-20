@@ -1,18 +1,23 @@
-# Data template
+# RECAP Academic paper template
 
 ## Purpose
 
-This repository provides a batteries-included starter template for academic data-related projects using the QuaLaR (Quarto + LaTeX + R) stack. It is meant to be used within a devcontainer for getting started quickly, with a large number of development environments (e.g., VSCode, Positron, RStudio). The building blocks of this template are: 
+[RECAP](https://recap-org.github.io) (Reproducible Environments for Collaborative Academic Projects) helps social scientists start projects with fully reproducible, ready-to-use research environments. This repository is a RECAP-generated starter template for academic data projects using the QuaLaR (Quarto + LaTeX + R) stack and is designed to run inside the provided devcontainer or in cloud IDEs (e.g., GitHub Codespaces) and local IDEs (VS Code, RStudio).
+
+Key features provided by this template and the RECAP environment:
+
+- A containerized, reproducible software environment with a preconfigured statistical language (R, Python, or Stata) and LaTeX for writing.
+- A clear workflow that converts raw data into processed data, analyses processed data into figures and tables, and uses those assets in LaTeX documents (article, appendix, presentation).
+- Built-in practices for reproducible research: version control ([git](https://git-scm.com/)), dependency management ([renv](https://rstudio.github.io/renv/)), automated build pipelines ([Make](https://www.gnu.org/software/make/make.html)), and testing ([testthat](https://testthat.r-lib.org/)).
+- Documentation and tutorials (see the [RECAP](https://recap-org.github.io) site) to help you get started and teach collaborators.
+
+The building blocks of this template are:
 
 1. Clean raw data to produce processed data
 2. Analyse the processed data to produce tables and figures
 3. Use the tables and figures in a series of LaTeX documents: the research article, a separate appendix, and a Beamer presentation. 
 
-This starter template enforces a series of good practices for reproductible research: 
-
-- Use tests to make sure that your data is sound and your helper functions work as expected. 
-- Declare explicitly the environment used for the analysis, using the renv package. 
-- Declare the entire build process of the project, from cleaning data to generating the article, appendix, and presentation using GNU make. 
+These three steps are orchestrated using Make, which ensures that each step is only re-executed when necessary.
 
 ## Getting started
 
@@ -22,36 +27,26 @@ To get started, above the file list, click **Use this template**.
 
 You have two options: 
 
-1. Try out the template online first, then save your own copy.
-2. Create your copy of the repository first, then modify it: select **Create a new repository**. 
+### Try it out online
 
-### Test the template online first
+1. Click the green **Code** button and select **Open with Codespaces > New codespace**.
+2. Wait for the codespace to be created and started. **This may take up to 10 minutes.** ☕
+3. Once the codespace is ready, you can follow the instructions in the **Basic demo** section below.
 
-1. Select **Open in a codespace**. 
+### Work locally
 
-### Create your copy first
-
-1. Select **Create a new repository**.
-2. Use the Owner dropdown menu to select the account you want to own the repository.
-
-![Set the repository's owner](https://docs.github.com/assets/cb-124337/mw-1440/images/help/repository/create-repository-owner.webp)
-
-3. Type a name for your repository (maximum 100 characters), and an optional description.
-
-![Set the repository's name](https://docs.github.com/assets/cb-136860/mw-1440/images/help/repository/create-repository-name.webp)
-
-4. Choose a repository visibility.
-5. Click **Create repository from template.**
+1. Click the green **Code** button and select **Local** to clone it or download it. 
+2. Make sure you have [Docker](https://www.docker.com/get-started/) and [Devpod](https://devpod.sh/) installed and running. Then, open the project with Devpod to get the same containerized environment as in Codespaces, but in the IDE of your choice: VS Code, Positron, RStudio (Windows only). On VS Code, you can also use the [VS Code Remote - Containers](https://code.visualstudio.com/docs/remote/containers) extension if you prefer not to use Devpod.
 
 ## Basic demo
 
-Run the demo by opening a terminal and typing:
+On VS Code or Github Codespaces, click Menu > View > Open the Command Palette (or press Ctrl + Shift + P) to open the Command Palette, then type "Makefile: Build the current target" and press Enter. Otherwise, you can open a terminal in your IDE and type:
 
 ```bash
-make all
+make
 ```
 
-This will run the data cleaning script, then do the analysis, and finally compile all the LaTeX documents. You will find the final documents in the `./bin/tex` directory and intermediary reports of the data cleaning and analysis steps in the `./bin/src` directory.
+ This will run the data cleaning script, then do the analysis, and finally compile all the LaTeX documents. You will find the final documents in the `./bin/tex` directory and intermediary reports of the data cleaning and analysis steps in the `./bin/src` directory.
 
 Run the tests by opening a terminal and typing: 
 
@@ -143,4 +138,3 @@ We thank
 
 - [Jason Leung](https://unsplash.com/@ninjason?utm_content=creditCopyText&utm_medium=referral&utm_source=unsplash) on [Unsplash](https://unsplash.com/photos/donkey-kong-arcade-game-screen-with-1981-date-c5tiCWrZADc?utm_content=creditCopyText&utm_medium=referral&utm_source=unsplash) for that nice Donkey Kong photo.
 - [grandmaster07](https://www.kaggle.com/grandmaster07) for the student exam score dataset analysis published on [Kaggle](https://www.kaggle.com/datasets/grandmaster07/student-exam-score-dataset-analysis)
-      
