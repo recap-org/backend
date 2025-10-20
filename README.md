@@ -252,6 +252,12 @@ backend/
 
 The API includes interactive documentation at `/docs` where you can test all endpoints.
 
+Additionally, CI runs a check on every PR to ensure all cookiecutter templates render successfully. You can run the same check locally:
+
+```bash
+python scripts/test_cookiecutters.py
+```
+
 ### Adding New Templates
 
 1. Add the template to `cookiecutter/`
