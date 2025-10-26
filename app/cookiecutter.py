@@ -25,16 +25,9 @@ from cookiecutter.main import cookiecutter
 import httpx
 
 from .config import settings
-from .services.generator import zip_directory_with_symlinks
+from .services.generator import zip_directory_with_symlinks, _load_main_config, _load_template_config, _resolve_template_path, _build_extra_context_from_template
 
 router = APIRouter()
-
-# Base directory where cookiecutter templates live
-COOKIECUTTER_BASE = Path(__file__).resolve(
-).parents[1] / settings.cookiecutter_base_path
-
-# Reserved keys to exclude from request schema building
-RESERVED_CONFIG_KEYS = {"__prompts__", "_jinja2_env_vars"}
 
 
 class TemplateInfo(BaseModel):
@@ -58,54 +51,6 @@ class GitHubRepoResponse(BaseModel):
     default_branch: str
     description: Optional[str] = None
     visibility: Optional[str] = None
-
-
-def _load_main_config() -> Dict[str, Any]:
-    cfg_path = COOKIECUTTER_BASE / "cookiecutter.json"
-    if not cfg_path.exists():
-        raise HTTPException(
-            status_code=500, detail="Template configuration not found")
-    with open(cfg_path, "r") as f:
-        return json.load(f)
-
-
-def _resolve_template_path(template_name: str) -> Path:
-    main = _load_main_config()
-    if template_name not in main.get("templates", {}):
-        raise HTTPException(
-            status_code=404, detail=f"Template '{template_name}' not found")
-    rel = main["templates"][template_name]["path"]
-    path = COOKIECUTTER_BASE / rel
-    if not path.exists():
-        raise HTTPException(
-            status_code=404, detail=f"Template directory not found: {path}")
-    return path
-
-
-def _load_template_config(template_name: str) -> Dict[str, Any]:
-    path = _resolve_template_path(template_name)
-    cfg = path / "cookiecutter.json"
-    if not cfg.exists():
-        raise HTTPException(
-            status_code=404, detail=f"Configuration for template '{template_name}' not found")
-    with open(cfg, "r") as f:
-        return json.load(f)
-
-
-def _build_extra_context_from_template(template_name: str, overrides: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    template_cfg = _load_template_config(template_name)
-    defaults = {k: v for k, v in template_cfg.items()
-                if k not in RESERVED_CONFIG_KEYS}
-    extra: Dict[str, Any] = dict(defaults)
-    if overrides:
-        for k, v in overrides.items():
-            if k in RESERVED_CONFIG_KEYS:
-                continue
-            extra[k] = v
-    # Ensure project_name fallback exists
-    if not extra.get("project_name"):
-        extra["project_name"] = "project"
-    return extra
 
 
 @router.get("/cookiecutter", response_model=TemplateListResponse)
@@ -258,10 +203,10 @@ async def create_github_repo(
         repo_dir = Path(output_dir)
         subprocess.run(["git", "init"], cwd=repo_dir,
                        check=True, capture_output=True, text=True)
-        # Best-effort user config from context
-        email = str(overrides.get("email") or "noreply@example.com")
-        full_name = f"{overrides.get('first_name') or 'User'} {overrides.get('last_name') or ''}".strip(
-        )
+
+        email = "bot@recap-org.github.io"
+        full_name = "RECAP bot"
+
         subprocess.run(["git", "config", "user.email", email],
                        cwd=repo_dir, check=True, capture_output=True, text=True)
         subprocess.run(["git", "config", "user.name", full_name],

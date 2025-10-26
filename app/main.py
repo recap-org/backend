@@ -80,7 +80,6 @@ async def root():
         "version": settings.app_version,
         "status": "operational",
         "endpoints": {
-            "/health": "Health check endpoint",
             "/cookiecutter": "List available templates",
             "/cookiecutter/{template_name}": "Get template configuration",
             "/cookiecutter/{template_name}/download": "Generate a template and download it",
@@ -90,22 +89,6 @@ async def root():
             "/auth/github/me": "Get the authenticated GitHub user (if logged in)"
         }
     }
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring."""
-    templates_exist = COOKIECUTTER_BASE.exists()
-    return JSONResponse(
-        status_code=200 if templates_exist else 503,
-        content={
-            "status": "healthy" if templates_exist else "unhealthy",
-            "version": settings.app_version,
-            "templates_directory_exists": templates_exist,
-            "templates_path": str(COOKIECUTTER_BASE)
-        }
-    )
-
 
 # --- GitHub OAuth: Login and Callback ---
 app.include_router(auth_router)

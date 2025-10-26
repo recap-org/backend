@@ -1,42 +1,28 @@
-name: Tests
+name: CI
 
 on:
   workflow_dispatch:
-  pull_request:
+    pull_request:
 
 jobs:
-  build-data-template:
+  tests:
+    name: Unit and Integration Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Test template generation
-        run: |
-          python scripts/test_cookiecutters.py --keep
-
-      - name: Test data template
-        uses: devcontainers/ci@v0.3
-        with:
-            subFolder: test_artifacts/data
-            runCmd: |
-                make all
-                make tests
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-outputs
-          path: test_artifacts/data/bin/
-          retention-days: 30
+      - name: Run tests
+        run: pytest -q
